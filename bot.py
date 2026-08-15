@@ -14,12 +14,8 @@ app = Flask('')
 def home():
     return "Discord Level Bot is running!"
 
-def run():
+def run_flask():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
 
 # إعدادات الصلاحيات
 intents = discord.Intents.default()
@@ -27,13 +23,11 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 
-# --- [ التعديل الأهم لحل مشكلة الأوفلاين ] ---
 class LevelBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='!', intents=intents)
 
     async def setup_hook(self):
-        # بدء مهمة الصوت الخلفية بطريقة صحيحة تمنع الانهيار
         self.loop.create_task(voice_xp_loop())
 
 bot = LevelBot()
@@ -60,7 +54,6 @@ async def on_ready():
     print(f'Logged in as {bot.user.name} (ID: {bot.user.id}) successfully!')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="!rank | Level System"))
 
-# دالة إرسال رسالة اللفل بدون صور
 async def send_level_up_text(guild, member, level, type_name):
     target_channel = discord.utils.get(guild.text_channels, name=LEVEL_CHANNEL_NAME)
     if not target_channel and guild.text_channels:
@@ -141,7 +134,6 @@ async def voice_xp_loop():
                                 await db.commit()
                         voice_timers[user_id] = current_time
 
-# أمر الرانك بدون إرسال صور
 @bot.command(name='rank')
 async def rank(ctx):
     user_id = str(ctx.author.id)
@@ -155,9 +147,12 @@ async def rank(ctx):
 
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
-# تشغيل البوت وسيرفر الويب معاً
+# التشغيل الأساسي: تشغيل فلاسك في خلفية مستقلة، وبوت ديسكورد بالأساس
 if __name__ == '__main__':
-    keep_alive()
+    # تشغيل سيرفر الويب في Thread منفصل لكي لا يعطل البوت
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
     
     token = os.environ.get('TOKEN')
     if token:
