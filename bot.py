@@ -7,18 +7,21 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
-# إعداد سيرفر فلاسك ليتوافق بدقة مع متطلبات Render Web Service المجانية
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is active and running!"
+    return "Bot is running!"
 
-def run_flask():
+def run():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=port)
 
-# إعدادات الصلاحيات
+def keep_alive():
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -52,7 +55,6 @@ async def init_db():
 async def on_ready():
     await init_db()
     print(f'Logged in as {bot.user.name} successfully!')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="!rank"))
 
 async def send_level_up_text(guild, member, level, type_name):
     target_channel = discord.utils.get(guild.text_channels, name=LEVEL_CHANNEL_NAME)
@@ -145,11 +147,7 @@ async def rank(ctx):
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
 if __name__ == '__main__':
-    # تشغيل فلاسك أولاً لكي يستجيب لفحص المنصة ولا يحدث خطأ Exited with status 1
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
-
+    keep_alive()
     token = os.environ.get('TOKEN')
     if token:
         bot.run(token)
