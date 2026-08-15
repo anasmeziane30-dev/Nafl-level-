@@ -7,20 +7,16 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
+# إعداد فلاسك لكي يستجيب لـ Render Web Service فوراً
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is online and running!"
 
-def run():
+def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -147,7 +143,12 @@ async def rank(ctx):
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
 if __name__ == '__main__':
-    keep_alive()
+    # تشغيل فلاسك في الخلفية أولاً
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    # تشغيل البوت
     token = os.environ.get('TOKEN')
     if token:
         bot.run(token)
