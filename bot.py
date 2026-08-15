@@ -27,7 +27,16 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+# --- [ التعديل الأهم لحل مشكلة الأوفلاين ] ---
+class LevelBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix='!', intents=intents)
+
+    async def setup_hook(self):
+        # بدء مهمة الصوت الخلفية بطريقة صحيحة تمنع الانهيار
+        self.loop.create_task(voice_xp_loop())
+
+bot = LevelBot()
 
 voice_timers = {}
 LEVEL_CHANNEL_NAME = "level-log"
@@ -146,14 +155,12 @@ async def rank(ctx):
 
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
-async def main():
+# تشغيل البوت وسيرفر الويب معاً
+if __name__ == '__main__':
     keep_alive()
-    bot.loop.create_task(voice_xp_loop())
+    
     token = os.environ.get('TOKEN')
     if token:
-        await bot.start(token)
+        bot.run(token)
     else:
         print("Error: TOKEN environment variable not found!")
-
-if __name__ == '__main__':
-    asyncio.run(main())
