@@ -1,156 +1,102 @@
 import os
-import asyncio
-import random
-import aiosqlite
+import sqlite3
 import discord
 from discord.ext import commands
-from flask import Flask
-from threading import Thread
 
-# إعداد فلاسك لكي يستجيب لـ Render Web Service فوراً
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is online and running!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
+# إعداد الصلاحيات (Intents)
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.voice_states = True
+intents.members = True
 
-class LevelBot(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-    async def setup_hook(self):
-        self.loop.create_task(voice_xp_loop())
+# إعداد قاعدة البيانات لحفظ الليفلات والنقاط
+conn = sqlite3.connect("levels.db")
+cursor = conn.cursor()
+cursor.execute(
+    """
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER,
+    guild_id INTEGER,
+    exp INTEGER,
+    level INTEGER,
+    PRIMARY KEY (user_id, guild_id)
+)
+"""
+)
+conn.commit()
 
-bot = LevelBot()
-voice_timers = {}
-LEVEL_CHANNEL_NAME = "level-log"
-
-async def init_db():
-    async with aiosqlite.connect('database.db') as db:
-        await db.execute('''
-            CREATE TABLE IF NOT EXISTS levels (
-                user_id TEXT,
-                guild_id TEXT,
-                xp INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 0,
-                PRIMARY KEY (user_id, guild_id)
-            )
-        ''')
-        await db.commit()
 
 @bot.event
 async def on_ready():
-    await init_db()
-    print(f'Logged in as {bot.user.name} successfully!')
+  print(f"تم تسجيل الدخول بنجاح باسم: {bot.user}")
 
-async def send_level_up_text(guild, member, level, type_name):
-    target_channel = discord.utils.get(guild.text_channels, name=LEVEL_CHANNEL_NAME)
-    if not target_channel and guild.text_channels:
-        target_channel = guild.system_channel or guild.text_channels[0]
-    if target_channel:
-        await target_channel.send(f"🥳 Congratulations {member.mention}, you have reached level number **{level}**! ({type_name})")
 
 @bot.event
 async def on_message(message):
-    if message.author.bot or not message.guild:
-        await bot.process_commands(message)
-        return
+  # تجاهل رسائل البوتات
+  if message.author.bot:
+    return
 
-    user_id = str(message.author.id)
-    guild_id = str(message.guild.id)
-    xp_to_add = random.randint(15, 25)
+  user_id = message.author.id
+  guild_id = message.guild.id
 
-    async with aiosqlite.connect('database.db') as db:
-        async with db.execute('SELECT xp, level FROM levels WHERE user_id = ? AND guild_id = ?', (user_id, guild_id)) as cursor:
-            row = await cursor.fetchone()
+  cursor.execute(
+      "SELECT exp, level FROM users WHERE user_id = ? AND guild_id = ?",
+      (user_id, guild_id),
+  )
+  result = cursor.fetchone()
 
-        if not row:
-            await db.execute('INSERT INTO levels (user_id, guild_id, xp, level) VALUES (?, ?, ?, ?)', (user_id, guild_id, xp_to_add, 0))
-            await db.commit()
-        else:
-            xp, level = row
-            new_xp = xp + xp_to_add
-            needed_xp = (level + 1) * 100
+  if result is None:
+    cursor.execute(
+        "INSERT INTO users VALUES (?, ?, ?, ?)", (user_id, guild_id, 15, 1)
+    )
+  else:
+    exp, level = result
+    exp += 15
 
-            if new_xp >= needed_xp:
-                level += 1
-                await send_level_up_text(message.guild, message.author, level, "Chat")
+    # معادلة حساب الليفل (كل 100 نقطة ضرب الليفل الحالي = ليفل جديد)
+    if exp >= level * 100:
+      level += 1
+      exp = 0
+      await message.channel.send(
+          f"مبروك {message.author.mention}! لقد صعدت إلى المستوى **{level}** 🎉"
+      )
 
-            await db.execute('UPDATE levels SET xp = ?, level = ? WHERE user_id = ? AND guild_id = ?', (new_xp, level, user_id, guild_id))
-            await db.commit()
+    cursor.execute(
+        "UPDATE users SET exp = ?, level = ? WHERE user_id = ? AND guild_id ="
+        " ?",
+        (exp, level, user_id, guild_id),
+    )
 
-    await bot.process_commands(message)
+  conn.commit()
+  await bot.process_commands(message)
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    if member.bot:
-        return
-    user_id = str(member.id)
-    if before.channel is None and after.channel is not None:
-        voice_timers[user_id] = asyncio.get_event_loop().time()
-    elif before.channel is not None and after.channel is None:
-        if user_id in voice_timers:
-            del voice_timers[user_id]
 
-async def voice_xp_loop():
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        await asyncio.sleep(60)
-        current_time = asyncio.get_event_loop().time()
-        for user_id, join_time in list(voice_timers.items()):
-            if current_time - join_time >= 60:
-                for guild in bot.guilds:
-                    member = guild.get_member(int(user_id))
-                    if member and member.voice and member.voice.channel:
-                        guild_id = str(guild.id)
-                        xp_to_add = 10
-                        async with aiosqlite.connect('database.db') as db:
-                            async with db.execute('SELECT xp, level FROM levels WHERE user_id = ? AND guild_id = ?', (user_id, guild_id)) as cursor:
-                                row = await cursor.fetchone()
-                            if not row:
-                                await db.execute('INSERT INTO levels (user_id, guild_id, xp, level) VALUES (?, ?, ?, ?)', (user_id, guild_id, xp_to_add, 0))
-                                await db.commit()
-                            else:
-                                xp, level = row
-                                new_xp = xp + xp_to_add
-                                needed_xp = (level + 1) * 100
-                                if new_xp >= needed_xp:
-                                    level += 1
-                                    await send_level_up_text(guild, member, level, "Voice")
-                                await db.execute('UPDATE levels SET xp = ?, level = ? WHERE user_id = ? AND guild_id = ?', (new_xp, level, user_id, guild_id))
-                                await db.commit()
-                        voice_timers[user_id] = current_time
+# أمر لمعرفة الليفل الحالي
+@bot.command(name="level", aliases=["rank"])
+async def rank(ctx, member: discord.Member = None):
+  member = member or ctx.author
+  cursor.execute(
+      "SELECT exp, level FROM users WHERE user_id = ? AND guild_id = ?",
+      (member.id, ctx.guild.id),
+  )
+  result = cursor.fetchone()
 
-@bot.command(name='rank')
-async def rank(ctx):
-    user_id = str(ctx.author.id)
-    guild_id = str(ctx.guild.id)
-    async with aiosqlite.connect('database.db') as db:
-        async with db.execute('SELECT xp, level FROM levels WHERE user_id = ? AND guild_id = ?', (user_id, guild_id)) as cursor:
-            row = await cursor.fetchone()
-    current_xp = row[0] if row else 0
-    current_level = row[1] if row else 0
-    needed_xp = (current_level + 1) * 100
-    await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
+  if result is None:
+    await ctx.send(f"العضو {member.mention} ليس لديه أي نقاط بعد!")
+  else:
+    exp, level = result
+    embed = discord.Embed(
+        title=f"معلومات رتبة {member.name}", color=discord.Color.blue()
+    )
+    embed.add_field(name="المستوى (Level)", value=str(level), inline=True)
+    embed.add_field(
+        name="النقاط (XP)", value=f"{exp} / {level * 100}", inline=True
+    )
+    await ctx.send(embed=embed)
 
-if __name__ == '__main__':
-    # تشغيل فلاسك في الخلفية أولاً
-    flask_thread = Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
 
-    # تشغيل البوت
-    token = os.environ.get('TOKEN')
-    if token:
-        bot.run(token)
-    else:
-        print("Error: TOKEN not found!")
+# قراءة التوكن بأمان من متغيرات البيئة في Render
+TOKEN = os.getenv("DISCORD_TOKEN")
+bot.run(TOKEN)
