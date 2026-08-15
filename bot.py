@@ -7,12 +7,12 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
-# إعداد سيرفر فلاسك الآمن
+# إعداد سيرفر فلاسك ليتوافق بدقة مع متطلبات Render Web Service المجانية
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "Bot is active and running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -145,11 +145,11 @@ async def rank(ctx):
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
 if __name__ == '__main__':
-    # تشغيل فلاسك بأمان في الخلفية
+    # تشغيل فلاسك أولاً لكي يستجيب لفحص المنصة ولا يحدث خطأ Exited with status 1
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
-    
+
     token = os.environ.get('TOKEN')
     if token:
         bot.run(token)
