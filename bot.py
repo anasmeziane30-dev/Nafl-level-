@@ -21,7 +21,7 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# إعدادات بوت الديسكورد
+# إعدادات بوت الديسكورد والصلاحيات
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -33,7 +33,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 voice_timers = {}
 
 # --- [ اسم القناة المخصصة لإرسال إشعارات اللفل ] ---
-LEVEL_CHANNEL_NAME = "level-log" # يمكنك تغيير هذا الاسم إلى اسم القناة التي تفضلها في سيرفرك
+LEVEL_CHANNEL_NAME = "level-log" # تأكد من إنشاء قناة بهذا الاسم في سيرفرك
 
 async def init_db():
     async with aiosqlite.connect('database.db') as db:
@@ -54,7 +54,7 @@ async def on_ready():
     print(f'Logged in as {bot.user.name}!')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="!rank | Level System"))
 
-# دالة مساعدة لإرسال رسالة اللفل بالنص المطلوب في القناة المخصصة
+# دالة إرسال رسالة اللفل بالنص المطلوب
 async def send_level_up_text(guild, member, level, type_name):
     target_channel = discord.utils.get(guild.text_channels, name=LEVEL_CHANNEL_NAME)
     
@@ -169,9 +169,13 @@ async def rank(ctx):
     avatar_url = ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}\n🖼️ {avatar_url}")
 
-# تشغيل سيرفر الويب والبوت معاً
+# تشغيل سيرفر الويب والبوت مع التحقق من التوكن
 if __name__ == '__main__':
     keep_alive()
     bot.loop.create_task(voice_xp_loop())
-    bot.run(os.environ.get('TOKEN'))
-
+    
+    token = os.environ.get('TOKEN')
+    if token:
+        bot.run(token)
+    else:
+        print("Error: TOKEN environment variable not found!")
