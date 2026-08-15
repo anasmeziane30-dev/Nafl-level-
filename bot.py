@@ -7,15 +7,16 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
-# إعداد سيرفر فلاسك لإبقاء البوت مستيقظاً
+# إعداد سيرفر فلاسك الآمن
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Discord Level Bot is running!"
+    return "Bot is alive!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 # إعدادات الصلاحيات
 intents = discord.Intents.default()
@@ -31,7 +32,6 @@ class LevelBot(commands.Bot):
         self.loop.create_task(voice_xp_loop())
 
 bot = LevelBot()
-
 voice_timers = {}
 LEVEL_CHANNEL_NAME = "level-log"
 
@@ -51,17 +51,15 @@ async def init_db():
 @bot.event
 async def on_ready():
     await init_db()
-    print(f'Logged in as {bot.user.name} (ID: {bot.user.id}) successfully!')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="!rank | Level System"))
+    print(f'Logged in as {bot.user.name} successfully!')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="!rank"))
 
 async def send_level_up_text(guild, member, level, type_name):
     target_channel = discord.utils.get(guild.text_channels, name=LEVEL_CHANNEL_NAME)
     if not target_channel and guild.text_channels:
         target_channel = guild.system_channel or guild.text_channels[0]
-        
     if target_channel:
-        content = f"🥳 Congratulations {member.mention}, you have reached level number **{level}**! ({type_name})"
-        await target_channel.send(content)
+        await target_channel.send(f"🥳 Congratulations {member.mention}, you have reached level number **{level}**! ({type_name})")
 
 @bot.event
 async def on_message(message):
@@ -144,12 +142,10 @@ async def rank(ctx):
     current_xp = row[0] if row else 0
     current_level = row[1] if row else 0
     needed_xp = (current_level + 1) * 100
-
     await ctx.send(f"📊 **User Level:** {ctx.author.name}\n🌟 **Level:** {current_level}\n✨ **XP:** {current_xp} / {needed_xp}")
 
-# التشغيل الأساسي: تشغيل فلاسك في خلفية مستقلة، وبوت ديسكورد بالأساس
 if __name__ == '__main__':
-    # تشغيل سيرفر الويب في Thread منفصل لكي لا يعطل البوت
+    # تشغيل فلاسك بأمان في الخلفية
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
@@ -158,4 +154,4 @@ if __name__ == '__main__':
     if token:
         bot.run(token)
     else:
-        print("Error: TOKEN environment variable not found!")
+        print("Error: TOKEN not found!")
